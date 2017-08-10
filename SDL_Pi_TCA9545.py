@@ -1,5 +1,5 @@
 # SDL_Pi_TCA9545.py Python Driver Code
-# SwitchDoc Labs April 1, 2015	 
+# SwitchDoc Labs April 1, 2015
 # V 1.2
 from datetime import datetime
 import smbus
@@ -12,10 +12,10 @@ TCA9545_ADDRESS =                         (0x73)    # 1110011 (A0+A1=VDD)
 # CONFIG REGISTER (R/W)
 TCA9545_REG_CONFIG            =          (0x00)
 
-TCA9545_CONFIG_BUS0  =                (0x01)  # 1 = enable, 0 = disable 
-TCA9545_CONFIG_BUS1  =                (0x02)  # 1 = enable, 0 = disable 
-TCA9545_CONFIG_BUS2  =                (0x04)  # 1 = enable, 0 = disable 
-TCA9545_CONFIG_BUS3  =                (0x08)  # 1 = enable, 0 = disable 
+TCA9545_CONFIG_BUS0  =                (0x01)  # 1 = enable, 0 = disable
+TCA9545_CONFIG_BUS1  =                (0x02)  # 1 = enable, 0 = disable
+TCA9545_CONFIG_BUS2  =                (0x04)  # 1 = enable, 0 = disable
+TCA9545_CONFIG_BUS3  =                (0x08)  # 1 = enable, 0 = disable
 
 
 class SDL_Pi_TCA9545():
@@ -40,10 +40,10 @@ class SDL_Pi_TCA9545():
     # public functions
 
     def read_control_register(self):
-	    # Reads Control Register 
+	    # Reads Control Register
 	    value = self._read()
 	    return value
 
     def write_control_register(self, config):
-	    # Writes Control Register 
+	    # Writes Control Register
   	    self._write(TCA9545_REG_CONFIG, config)
