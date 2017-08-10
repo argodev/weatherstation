@@ -5,6 +5,11 @@ This is the code repository supporting the weather station my son and I built as
 - [Drivers for Grove Sunlight Sensor based on SI1145](https://github.com/switchdoclabs/SDL_Pi_SI1145)
 
 
+## Parts List:
+
+
+
+
 ## Sensors:
 
 ### Grove Sunlight / IR / UV I2C Sensor
@@ -17,6 +22,9 @@ The Si1145 appears as ID 0x3C (60) on I2C Bus 1
 
 ### I2C 4 Channel I2C Bus Mux
 This appears as ID 0x49 (73) on the RPI's I2C Bus 1
+
+This is the TCA9545 and the drivers come with a test script - `testSDL_Pi_TCA9545.py1` that was run and verified it was operating properly.
+
 
 ### Bus 0
 - 0x3c - SSD1306 OLED Screen
