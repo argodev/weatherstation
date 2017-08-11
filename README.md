@@ -32,7 +32,7 @@ This is the TCA9545 and the drivers come with a test script - `testSDL_Pi_TCA954
 - 0x48 - ADS1115 Analog to Digital Converter
 - 0x57  ????
 - 0x68 - DS3231 Real Time Clock
-- 0x73 - Si1145 I2C 4 Channel I2C Bus Mux
+- 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
 - 0x77 - BMP280 Barometric Pressure
 
 - ??? 0x56 - ATC EEPROM ???
@@ -41,13 +41,98 @@ This is the TCA9545 and the drivers come with a test script - `testSDL_Pi_TCA954
 
 ### Bus 1
 - 0x03 - Embedded Adventures Lightning Detector
-- 0x73 - Si1145 I2C 4 Channel I2C Bus Mux
+- 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
 
 ### Bus 2
 - 0x40 - INA3221 3 Channel Voltage / Current Monitor
 - 0x48 - ADS1015 SunAir Plus
-- 0x73 - Si1145 I2C 4 Channel I2C Bus Mux
+- 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
 
 ### Bus 3
-- 0x73 - Si1145 I2C 4 Channel I2C Bus Mux
+- 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
 
+
+
+## Test Script
+There is a test script (`test_all.py`) that simply walks through each of the devices, tests it, and reports the status of the device. It is assumed that everything is connected properly as there are not many air bags. The test process is as follows:
+
+- TCA9545 / I2C 4-Channel Mux
+  - Enables the mux on channel 0
+  - Switches to channel 2.
+  - Assuming no errors, reports success.
+- SSD1306 OLED Screen:
+  - Ensure I2C Mux has channel 0 enabled
+  - clears the screen
+  - displays a cat picture
+  - holds for 10s
+  - clears the screen
+  - Assuming no errors, report success
+- HTU21D-F Humidity Sensor
+  - Ensure I2C Mux has channel 0 enabled
+
+
+
+
+-----------BUS 0-------------------
+tca9545 control register B3-B0 = 0x1
+ignore Interrupts if INT3' - INT0' not connected
+tca9545 control register Interrupts = 0x0
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- --
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+30: -- -- -- -- -- -- -- -- -- -- -- -- 3c -- -- --
+40: 40 -- -- -- -- -- -- -- 48 -- -- -- -- -- -- --
+50: -- -- -- -- -- -- -- 57 -- -- -- -- -- -- -- --
+60: 60 -- -- -- -- -- -- -- 68 -- -- -- -- -- -- --
+70: -- -- -- 73 -- -- -- 77
+
+-----------------------------------
+
+-----------BUS 1-------------------
+tca9545 control register B3-B0 = 0x2
+ignore Interrupts if INT3' - INT0' not connected
+tca9545 control register Interrupts = 0x0
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- --
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+60: 60 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+70: -- -- -- 73 -- -- -- --
+
+-----------------------------------
+
+-----------BUS 2-------------------
+tca9545 control register B3-B0 = 0x4
+ignore Interrupts if INT3' - INT0' not connected
+tca9545 control register Interrupts = 0x0
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- --
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+40: 40 -- -- -- -- -- -- -- 48 -- -- -- -- -- -- --
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+60: 60 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+70: -- -- -- 73 -- -- -- --
+
+-----------------------------------
+
+-----------BUS 3-------------------
+tca9545 control register B3-B0 = 0x8
+ignore Interrupts if INT3' - INT0' not connected
+tca9545 control register Interrupts = 0x0
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- --
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+60: 60 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+70: -- -- -- 73 -- -- -- --
+
+-----------------------------------
