@@ -321,7 +321,7 @@ class WeatherStation(object):
 
             print readings
             with open('weather.log', 'a') as logfile:
-                logfile.write(json.dumps(readings))
+                logfile.write(json.dumps(readings) + '\n')
 
             time.sleep(10)
 
