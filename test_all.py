@@ -6,6 +6,7 @@ import logging
 import time
 from datetime import datetime
 import json
+import requests
 
 import Image
 
@@ -21,6 +22,9 @@ import SDL_Pi_INA3221
 
 
 # setup our constants
+BASE_URL = 'https://dweet.io'
+THING_NAME = 'argo_weather'
+
 TCA9545_ADDRESS = (0x73)  # 1110011 (A0+A1=VDD)
 TCA9545_REG_CONFIG = (0x00)  # config register (R/W)
 TCA9545_CONFIG_BUS0 = (0x01)  # 1 = enable, 0 = disable
@@ -260,6 +264,25 @@ class WeatherStation(object):
         pass
 
 
+    def send_dweet(self, payload):
+        url = '{0}/dweet/for/{1}'.format(BASE_URL, THING_NAME)
+        data = json.dumps(payload)
+        headers = {'Content-type': 'application/json'}
+
+        request_func = getattr(requests, 'post')
+        response = request_func(url, data=data, headers=headers)
+
+        # raise an exception if request is not successful
+        print response.status_code
+        # if not response.status_code == requests.codes.ok:
+        #     print'HTTP {0} response'.format(response.status_code)
+        #     # raise DweepyError('HTTP {0} response'.format(response.status_code))
+        response_json = response.json()
+        if response_json['this'] == 'failed':
+            print response_json['because']
+            # raise DweepyError(response_json['because'])
+        return response_json['with']
+
     def run_loop(self):
         while True:
 
@@ -322,8 +345,8 @@ class WeatherStation(object):
             print readings
             with open('weather.log', 'a') as logfile:
                 logfile.write(json.dumps(readings) + '\n')
-
-            time.sleep(10)
+            self.send_dweet(readings)
+            time.sleep(20)
 
 
 
