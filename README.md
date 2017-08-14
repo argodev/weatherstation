@@ -27,29 +27,31 @@ This is the TCA9545 and the drivers come with a test script - `testSDL_Pi_TCA954
 
 
 ### Bus 0
-- 0x3c - SSD1306 OLED Screen
++ 0x3c - SSD1306 OLED Screen
 - 0x40 - HTU21D-F Humidity Sensor
 - 0x48 - ADS1115 Analog to Digital Converter
-- 0x57  ????
-- 0x68 - DS3231 Real Time Clock
-- 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
-- 0x77 - BMP280 Barometric Pressure
++ 0x5c - AM2315 Outdoor Temp / Humidity
++ 0x68 - DS3231 Real Time Clock
++ 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
++ 0x77 - BMP280 Barometric Pressure
 
 - ??? 0x56 - ATC EEPROM ???
 - ??? 0x50 - FRAM non-volatile storage ???
-- ??? 0x5c - AM2315 Outdoor Temp / Humidity ???
 
 ### Bus 1
 - 0x03 - Embedded Adventures Lightning Detector
-- 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
++ 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
 
 ### Bus 2
-- 0x40 - INA3221 3 Channel Voltage / Current Monitor
++ 0x40 - INA3221 3 Channel Voltage / Current Monitor
 - 0x48 - ADS1015 SunAir Plus
-- 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
++ 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
 
 ### Bus 3
-- 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
++ 0x73 - TCA9545 I2C 4 Channel I2C Bus Mux
+
+
+> why does the temp look like x5c and x57?
 
 
 
