@@ -74,7 +74,7 @@ There is a test script (`test_all.py`) that simply walks through each of the dev
 
 
 
-
+```Shell
 -----------BUS 0-------------------
 tca9545 control register B3-B0 = 0x1
 ignore Interrupts if INT3' - INT0' not connected
@@ -138,3 +138,4 @@ tca9545 control register Interrupts = 0x0
 70: -- -- -- 73 -- -- -- --
 
 -----------------------------------
+```
