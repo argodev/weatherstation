@@ -15,7 +15,7 @@ DARKOFFSETIR = 253
 
 def SI1145_IR_to_Lux(ir):
    # irlux = ir * 14.5 / 2.44 for range = high and gain = 1
-   # apply dark offset   
+   # apply dark offset
    ir = ir - DARKOFFSETIR
    if ir < 0:
     ir = 0
@@ -25,7 +25,7 @@ def SI1145_IR_to_Lux(ir):
    multiplier = 0
    range = 0
    sensitivity =  0
-   gain = 1
+   #gain = 1
    # Get gain multipler
    # These are set to defaults in the Adafruit driver - need to change if you change them in the SI1145 driver
    '''
@@ -33,26 +33,26 @@ def SI1145_IR_to_Lux(ir):
    if ((range & 32) == 32):
        gain = 14.5
    '''
-   #gain = 14.5
+   gain = 14.5
    # Get sensitivity
    # These are set to defaults in the Adafruit driver - need to change if you change them in the SI1145 driver
    '''
    sensitivity = SI1145_Read_Param(fd, (unsigned char)ALS_IR_ADC_GAIN)
-   if ((sensitivity & 7) == 0): 
+   if ((sensitivity & 7) == 0):
        multiplier = 1
-   if ((sensitivity & 7) == 1): 
+   if ((sensitivity & 7) == 1):
        multiplier = 2
-   if ((sensitivity & 7) == 2): 
+   if ((sensitivity & 7) == 2):
        multiplier = 4
-   if ((sensitivity & 7) == 3): 
+   if ((sensitivity & 7) == 3):
        multiplier = 8
-    if ((sensitivity & 7) == 4): 
+    if ((sensitivity & 7) == 4):
         multiplier = 16
-   if ((sensitivity & 7) == 5): 
+   if ((sensitivity & 7) == 5):
        multiplier = 32
-   if ((sensitivity & 7) == 6): 
+   if ((sensitivity & 7) == 6):
        multiplier = 64
-   if ((sensitivity & 7) == 7): 
+   if ((sensitivity & 7) == 7):
        multiplier = 128
    '''
    multiplier = 1
@@ -61,7 +61,7 @@ def SI1145_IR_to_Lux(ir):
 
 def SI1145_VIS_to_Lux(vis):
    # vislux = vis * 14.5 / 2.44 for range = high and gain = 1
-   # apply dark offset   
+   # apply dark offset
    vis = vis - DARKOFFSETVIS
    if vis < 0:
     vis = 0
@@ -71,7 +71,7 @@ def SI1145_VIS_to_Lux(vis):
    multiplier = 0
    range = 0
    sensitivity =  0
-   gain = 1
+   #gain = 1
    # Get gain multipler
    # These are set to defaults in the Adafruit driver - need to change if you change them in the SI1145 driver
    '''
@@ -79,26 +79,26 @@ def SI1145_VIS_to_Lux(vis):
    if ((range & 32) == 32):
        gain = 14.5
    '''
-   #gain = 14.5
+   gain = 14.5
    # Get sensitivity
    # These are set to defaults in the Adafruit driver - need to change if you change them in the SI1145 driver
    '''
    sensitivity = SI1145_Read_Param(fd, (unsigned char)ALS_VIS_ADC_GAIN)
-   if ((sensitivity & 7) == 0): 
+   if ((sensitivity & 7) == 0):
        multiplier = 1
-   if ((sensitivity & 7) == 1): 
+   if ((sensitivity & 7) == 1):
        multiplier = 2
-   if ((sensitivity & 7) == 2): 
+   if ((sensitivity & 7) == 2):
        multiplier = 4
-   if ((sensitivity & 7) == 3): 
+   if ((sensitivity & 7) == 3):
        multiplier = 8
-    if ((sensitivity & 7) == 4): 
+    if ((sensitivity & 7) == 4):
         multiplier = 16
-   if ((sensitivity & 7) == 5): 
+   if ((sensitivity & 7) == 5):
        multiplier = 32
-   if ((sensitivity & 7) == 6): 
+   if ((sensitivity & 7) == 6):
        multiplier = 64
-   if ((sensitivity & 7) == 7): 
+   if ((sensitivity & 7) == 7):
        multiplier = 128
    '''
    multiplier = 1

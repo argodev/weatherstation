@@ -12,7 +12,8 @@ import Image
 
 import Adafruit_BMP.BMP280 as BMP280
 import Adafruit_SSD1306
-import Adafruit_HTU21D as HTU21D
+#import Adafruit_HTU21D as HTU21D
+import HTU21D
 from tentacle_pi.AM2315 import AM2315
 import SDL_Pi_TCA9545
 import SDL_Pi_SI1145.SDL_Pi_SI1145 as SI1145
@@ -55,6 +56,7 @@ class WeatherStation(object):
         self._sunlight = None
         self._barometer = None
         self._outdoor_temp = None
+        self._internal_humidity = None;
         self._rtc = None
         self._sun_air_plus = None
         self._weather_rack = None
@@ -221,6 +223,23 @@ class WeatherStation(object):
         except Exception as exc:
             logging.error('Real Time Clock Test Failed')
 
+    def test_internal_humidity(self):
+        if self._i2cmux is None:
+            self.test_i2c_mux()
+
+        self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
+
+        logging.info('Testing HTU21D-F Humidity Sensor...')
+        try:
+            self._internal_humidity = HTU21D.HTU21D()
+            temp = ((self._internal_humidity.read_temperature()*1.8) + 32)
+            logging.info("Internal Temp: %s F", temp)
+            logging.info("Humid: %s %% rH", self._internal_humidity.read_humidity())
+            logging.info('Humidity Sensor Test was Successful (HTU21D-F)')
+
+        except Exception as exc:
+            logging.error('Humidity Sensor Test Failed')
+            print exc
 
     def test_solar_power_controller(self):
         if self._i2cmux is None:
@@ -280,12 +299,12 @@ class WeatherStation(object):
         currentWindDirection = self._weather_rack.current_wind_direction()
         currentWindDirectionVoltage = self._weather_rack.current_wind_direction_voltage()
 
-        print("Rain Total=\t%0.2f in")%(totalRain/25.4)
-        print("Rain Last 60 Minutes=\t%0.2f in")%(rain60Minutes/25.4)
-        print("Wind Speed=\t%0.2f MPH")%(currentWindSpeed/1.6)
-        print("MPH wind_gust=\t%0.2f MPH")%(currentWindGust/1.6)
-        print "Wind Direction=\t\t\t %0.2f Degrees" % currentWindDirection
-        print "Wind Direction Voltage=\t\t %0.3f V" % currentWindDirectionVoltage
+        logging.info("Rain Total= %0.2f in", (totalRain/25.4))
+        logging.info("Rain Last 60 Minutes= %0.2f in", (rain60Minutes/25.4))
+        logging.info("Wind Speed= %0.2f MPH", (currentWindSpeed/1.6))
+        logging.info("MPH wind_gust= %0.2f MPH", (currentWindGust/1.6))
+        logging.info("Wind Direction= %0.2f Degrees", currentWindDirection)
+        logging.info("Wind Direction Voltage= %0.3f V",  currentWindDirectionVoltage)
 
     def test_lightning_detector(self):
         pass
@@ -300,7 +319,7 @@ class WeatherStation(object):
         response = request_func(url, data=data, headers=headers)
 
         # raise an exception if request is not successful
-        print response.status_code
+        #print response.status_code
         # if not response.status_code == requests.codes.ok:
         #     print'HTTP {0} response'.format(response.status_code)
         #     # raise DweepyError('HTTP {0} response'.format(response.status_code))
@@ -309,6 +328,8 @@ class WeatherStation(object):
             print response_json['because']
             # raise DweepyError(response_json['because'])
         return response_json['with']
+
+
 
     def run_loop(self):
         while True:
@@ -327,6 +348,9 @@ class WeatherStation(object):
                 wind_direction = self._weather_rack.current_wind_direction()
                 wind_direction_voltage = self._weather_rack.current_wind_direction_voltage()
 
+                internal_temp_2 = ((self._internal_humidity.read_temperature()*1.8) + 32)
+                internal_humidity = self._internal_humidity.read_humidity()
+
                 self._i2cmux.write_control_register(TCA9545_CONFIG_BUS2)
 
                 bus_voltage_1 = self._sun_air_plus.getBusVoltage_V(LIPO_BATTERY_CHANNEL)
@@ -337,9 +361,9 @@ class WeatherStation(object):
                 battery_power = battery_voltage * (battery_current/1000)
                 bus_voltage_2 = self._sun_air_plus.getBusVoltage_V(SOLAR_CELL_CHANNEL)
                 shunt_voltage_2 = self._sun_air_plus.getShuntVoltage_mV(SOLAR_CELL_CHANNEL)
-                solar_current = self._sun_air_plus.getCurrent_mA(SOLAR_CELL_CHANNEL)
+                solar_current = abs(self._sun_air_plus.getCurrent_mA(SOLAR_CELL_CHANNEL))
                 solar_voltage = bus_voltage_2 + (shunt_voltage_2 / 1000)
-                solar_power = solar_voltage * (solar_current/1000)
+                solar_power = abs(solar_voltage * (solar_current/1000))
                 bus_voltage_3 = self._sun_air_plus.getBusVoltage_V(OUTPUT_CHANNEL)
                 shunt_voltage_3 = self._sun_air_plus.getShuntVoltage_mV(OUTPUT_CHANNEL)
                 load_current = self._sun_air_plus.getCurrent_mA(OUTPUT_CHANNEL)
@@ -351,14 +375,12 @@ class WeatherStation(object):
                 sunlight_ir = SI1145Lux.SI1145_IR_to_Lux(self._sunlight.readIR())
                 sunlight_uv = self._sunlight.readUV()
                 sunlight_uv_index = sunlight_uv / 100.0
-                logging.info('Sunlight Visible: %f', sunlight_visible)
-                logging.info('Sunlight IR: %f', sunlight_ir)
-                logging.info('Sunlight UV: %f', sunlight_uv)
-                logging.info('Sunlight UV Index: %f', sunlight_uv_index)
 
                 readings = {
                     'timestamp' : str(datetime.now().isoformat()),
                     'internal_temp': internal_temp,
+                    'internal_temp_2': internal_temp_2,
+                    'internal_humidity': internal_humidity,
                     'pressure': pressure,
                     'altitude': altitude,
                     'sealevel_pressure': sealevel_pressure,
@@ -385,9 +407,9 @@ class WeatherStation(object):
                     'sunlight_uv': sunlight_uv,
                     'sunlight_uv_index': sunlight_uv_index,
                     'wind_speed': wind_speed,
-	                'wind_gust': wind_gust,
-		            'wind_direction': wind_direction,
-		            'wind_direction_voltage': wind_direction_voltage
+                    'wind_gust': wind_gust,
+                    'wind_direction': wind_direction,
+                    'wind_direction_voltage': wind_direction_voltage
                 }
 
                 # self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
@@ -398,56 +420,18 @@ class WeatherStation(object):
                 # Scroll_SSD1306.addLineOLED(self._oled,  ("Ext Temp=\t%0.2f F") % outside_temperature)
                 # Scroll_SSD1306.addLineOLED(self._oled,  ("Battery=\t%0.2f F") % battery_charge)
 
-
-
                 #print readings
                 if crc_check == 0:
                     with open('weather.log', 'a') as logfile:
                         logfile.write(json.dumps(readings) + '\n')
                     self._streamer.log_object(readings, key_prefix="some_dict")
                     self.send_dweet(readings)
-                time.sleep(590)
+                else:
+                    logging.info("CRC Failed: %i", crc_check)
+                time.sleep(59)
             except IOError:
                 logging.warn('Unable to read values due to an IO Error... Retrying')
                 time.sleep(5)
-
-
-
-# # enable I2C Bus 0
-# tca9545.write_control_register(TCA9545_CONFIG_BUS0)
-
-# logging.info('Testing HTU21D-F Humidity Sensor...')
-# try:
-#     htu21d = HTU21D.HTU21D()
-#     print 'Temp = {0:0.2f} *C'.format(htu21d.read_temperature())
-#     print 'Humidity  = {0:0.2f} %'.format(htu21d.read_humidity())
-#     print 'Dew Point = {0:0.2f} *C'.format(htu21d.read_dewpoint())
-#     logging.info('Humidity Sensor Test was Successful (HTU21D-F)')
-# except Exception as exc:
-#     logging.error('Humidity Sensor Test Failed')
-#     print exc
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def main():
@@ -459,6 +443,7 @@ def main():
     station = WeatherStation()
     station.test_i2c_mux()
     # station.test_oled_display()
+    station.test_internal_humidity()
     station.test_sunlight_sensor()
     station.test_barometric_pressure()
     station.test_outdoor_temp()
@@ -468,6 +453,10 @@ def main():
     logging.info('** Weather Station System Test Complete **')
 
     station.run_loop()
+
+    # lightning detetor
+
+    # rain bucket
 
 
 if __name__ == "__main__":

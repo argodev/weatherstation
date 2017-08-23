@@ -84,7 +84,7 @@ SI1145_PARAM_AUXADCMUX                  = 0x0F
 SI1145_PARAM_ALSVISADCOUNTER            = 0x10
 SI1145_PARAM_ALSVISADCGAIN              = 0x11
 SI1145_PARAM_ALSVISADCMISC              = 0x12
-SI1145_PARAM_ALSVISADCMISC_VISRANGE     = 0x10
+SI1145_PARAM_ALSVISADCMISC_VISRANGE     = 0x20
 #SI1145_PARAM_ALSVISADCMISC_VISRANGE     = 0x00
 
 SI1145_PARAM_ALSIRADCOUNTER             = 0x1D
@@ -99,14 +99,13 @@ SI1145_PARAM_ADCMUX_SMALLIR             = 0x00
 SI1145_PARAM_ADCMUX_LARGEIR             = 0x03
 
 
+# REGISTERS (and sub fields)
+SI1145_REG_PARTID = 0x00
+SI1145_REG_REVID = 0x01
+SI1145_REG_SEQID = 0x02
 
-# REGISTERS
-SI1145_REG_PARTID                       = 0x00
-SI1145_REG_REVID                        = 0x01
-SI1145_REG_SEQID                        = 0x02
-
-SI1145_REG_INTCFG                       = 0x03
-SI1145_REG_INTCFG_INTOE                 = 0x01
+SI1145_REG_INTCFG = 0x03
+SI1145_REG_INTCFG_INTOE= 0x01
 SI1145_REG_INTCFG_INTMODE               = 0x02
 
 SI1145_REG_IRQEN                        = 0x04
@@ -115,14 +114,16 @@ SI1145_REG_IRQEN_PS1EVERYSAMPLE         = 0x04
 SI1145_REG_IRQEN_PS2EVERYSAMPLE         = 0x08
 SI1145_REG_IRQEN_PS3EVERYSAMPLE         = 0x10
 
-
 SI1145_REG_IRQMODE1                     = 0x05
 SI1145_REG_IRQMODE2                     = 0x06
-
 SI1145_REG_HWKEY                        = 0x07
 SI1145_REG_MEASRATE0                    = 0x08
 SI1145_REG_MEASRATE1                    = 0x09
 SI1145_REG_PSRATE                       = 0x0A
+# Reserved = 0x0B
+# Reserved = 0x0C
+# Reserved = 0x0D
+# Reserved = 0x0E
 SI1145_REG_PSLED21                      = 0x0F
 SI1145_REG_PSLED3                       = 0x10
 SI1145_REG_UCOEFF0                      = 0x13
@@ -154,117 +155,118 @@ SI1145_REG_CHIPSTAT                     = 0x30
 SI1145_ADDR                             = 0x60
 
 class SDL_Pi_SI1145(object):
-        def __init__(self, address=SI1145_ADDR, busnum=I2C.get_default_bus()):
+    def __init__(self, address=SI1145_ADDR, busnum=I2C.get_default_bus()):
+        self._logger = logging.getLogger('SI1145')
+        self._device = I2C.Device(address, busnum)
+        self._reset()
+        self._load_calibration()
 
-                self._logger = logging.getLogger('SI1145')
+    # device reset
+    def _reset(self):
+        self._device.write8(SI1145_REG_MEASRATE0, 0)
+        self._device.write8(SI1145_REG_MEASRATE1, 0)
+        self._device.write8(SI1145_REG_IRQEN, 0)
+        self._device.write8(SI1145_REG_IRQMODE1, 0)
+        self._device.write8(SI1145_REG_IRQMODE2, 0)
+        self._device.write8(SI1145_REG_INTCFG, 0)
+        self._device.write8(SI1145_REG_IRQSTAT, 0xFF)
 
-                # Create I2C device.
-                self._device = I2C.Device(address, busnum)
+        self._device.write8(SI1145_REG_COMMAND, SI1145_RESET)
+        time.sleep(.01)
+        self._device.write8(SI1145_REG_HWKEY, 0x17)
+        time.sleep(.01)
 
-                #reset device
-                self._reset()
+    # write Param
+    def writeParam(self, p, v):
+        self._device.write8(SI1145_REG_PARAMWR, v)
+        self._device.write8(SI1145_REG_COMMAND, p | SI1145_PARAM_SET)
+        paramVal = self._device.readU8(SI1145_REG_PARAMRD)
+        return paramVal
 
-                # Load calibration values.
-                self._load_calibration()
+    # load calibration to sensor
+    def _load_calibration(self):
 
-        # device reset
-        def _reset(self):
-                self._device.write8(SI1145_REG_MEASRATE0, 0)
-                self._device.write8(SI1145_REG_MEASRATE1, 0)
-                self._device.write8(SI1145_REG_IRQEN, 0)
-                self._device.write8(SI1145_REG_IRQMODE1, 0)
-                self._device.write8(SI1145_REG_IRQMODE2, 0)
-                self._device.write8(SI1145_REG_INTCFG, 0)
-                self._device.write8(SI1145_REG_IRQSTAT, 0xFF)
+        # According to the datasheet, in order to enable UV readings, a few steps must be taken. The first is to
+        # set the four UCOEF0..3 registers (UltraViloet CO-Efficients). They suggest default values of 0x29, 0x89,
+        # 0x02 and 0x00.
+        self._device.write8(SI1145_REG_UCOEFF0, 0x29)
+        self._device.write8(SI1145_REG_UCOEFF1, 0x89)
+        self._device.write8(SI1145_REG_UCOEFF2, 0x02)
+        self._device.write8(SI1145_REG_UCOEFF3, 0x00)
 
-                self._device.write8(SI1145_REG_COMMAND, SI1145_RESET)
-                time.sleep(.01)
-                self._device.write8(SI1145_REG_HWKEY, 0x17)
-                time.sleep(.01)
+        # Enable UV sensor
+        # Enable IR sensor
+        # Enable Visible Light Sensor
+        self.writeParam(SI1145_PARAM_CHLIST, SI1145_PARAM_CHLIST_ENUV | SI1145_PARAM_CHLIST_ENALSIR | SI1145_PARAM_CHLIST_ENALSVIS)
 
-        # write Param
-        def writeParam(self, p, v):
-                self._device.write8(SI1145_REG_PARAMWR, v)
-                self._device.write8(SI1145_REG_COMMAND, p | SI1145_PARAM_SET)
-                paramVal = self._device.readU8(SI1145_REG_PARAMRD)
-                return paramVal
+        # enable the interrupts (OE = Output Enable)
+        self._device.write8(SI1145_REG_INTCFG, SI1145_REG_INTCFG_INTOE)
 
-        # load calibration to sensor
-        def _load_calibration(self):
-                # /***********************************/
-                # Enable UVindex measurement coefficients!
-                self._device.write8(SI1145_REG_UCOEFF0, 0x29)
-                self._device.write8(SI1145_REG_UCOEFF1, 0x89)
-                self._device.write8(SI1145_REG_UCOEFF2, 0x02)
-                self._device.write8(SI1145_REG_UCOEFF3, 0x00)
+        # enables ALS Interrupt (supporting VIS or UV)
+        self._device.write8(SI1145_REG_IRQEN, SI1145_REG_IRQEN_ALSEVERYSAMPLE)
 
-                # Enable UV sensor
-                self.writeParam(SI1145_PARAM_CHLIST, SI1145_PARAM_CHLIST_ENUV | SI1145_PARAM_CHLIST_ENALSIR | SI1145_PARAM_CHLIST_ENALSVIS | SI1145_PARAM_CHLIST_ENPS1)
+        # we aren't using proximity sensors, so we don't need to set/enable current for the LEDs
+        # reset state is 0000 0000 which is perfectly fine for our use case.
+        # self._device.write8(SI1145_REG_PSLED21, 0x03) # 20mA for LED 1 only
+        #self.writeParam(SI1145_PARAM_PS1ADCMUX, SI1145_PARAM_ADCMUX_LARGEIR)
 
-                # Enable interrupt on every sample
-                self._device.write8(SI1145_REG_INTCFG, SI1145_REG_INTCFG_INTOE)
-                self._device.write8(SI1145_REG_IRQEN, SI1145_REG_IRQEN_ALSEVERYSAMPLE)
+        # Prox sensor #1 is not being used (set to NONE)
+        self.writeParam(SI1145_PARAM_PSLED12SEL, SI1145_PARAM_PSLED12SEL_PS2NONE)
 
-                # /****************************** Prox Sense 1 */
+        ## Don't think I need this!
+        # Fastest clocks, clock div 1
+        #self.writeParam(SI1145_PARAM_PSADCGAIN, 0)
 
-                # Program LED current
-                self._device.write8(SI1145_REG_PSLED21, 0x03) # 20mA for LED 1 only
-                self.writeParam(SI1145_PARAM_PS1ADCMUX, SI1145_PARAM_ADCMUX_LARGEIR)
+        # Take 511 clocks to measure
+        #self.writeParam(SI1145_PARAM_PSADCOUNTER, SI1145_PARAM_ADCCOUNTER_511CLK)
 
-                # Prox sensor #1 uses LED #1
-                self.writeParam(SI1145_PARAM_PSLED12SEL, SI1145_PARAM_PSLED12SEL_PS1LED1)
+        # in prox mode, high range
+        #self.writeParam(SI1145_PARAM_PSADCMISC, SI1145_PARAM_PSADCMISC_RANGE | SI1145_PARAM_PSADCMISC_PSMODE)
+        #self.writeParam(SI1145_PARAM_ALSIRADCMUX, SI1145_PARAM_ADCMUX_SMALLIR)
 
-                # Fastest clocks, clock div 1
-                self.writeParam(SI1145_PARAM_PSADCGAIN, 0)
+        # Set properly for sunlight operation
+        self.writeParam(SI1145_PARAM_ALSIRADCGAIN, 0)
+        #self.writeParam(SI1145_PARAM_ALSIRADCGAIN, 4)
 
-                # Take 511 clocks to measure
-                self.writeParam(SI1145_PARAM_PSADCOUNTER, SI1145_PARAM_ADCCOUNTER_511CLK)
+                # # Take 511 clocks to measure is for high-gain/low-signal
+                # self.writeParam(SI1145_PARAM_ALSIRADCOUNTER, SI1145_PARAM_ADCCOUNTER_511CLK)
 
-                # in prox mode, high range
-                self.writeParam(SI1145_PARAM_PSADCMISC, SI1145_PARAM_PSADCMISC_RANGE | SI1145_PARAM_PSADCMISC_PSMODE)
-                self.writeParam(SI1145_PARAM_ALSIRADCMUX, SI1145_PARAM_ADCMUX_SMALLIR)
+        # Place the IR sensor in high signal mode
+        self.writeParam(SI1145_PARAM_ALSIRADCMISC, SI1145_PARAM_ALSIRADCMISC_RANGE)
+        #self.writeParam(SI1145_PARAM_ALSIRADCMISC, 0)
 
-                # Fastest clocks, clock div 1
-                #self.writeParam(SI1145_PARAM_ALSIRADCGAIN, 0)
-                self.writeParam(SI1145_PARAM_ALSIRADCGAIN, 4)
+        # per the spec sheet, set vis gain to 0 when operating in direct sunlight
+        self.writeParam(SI1145_PARAM_ALSVISADCGAIN, 0)
+        # self.writeParam(SI1145_PARAM_ALSVISADCGAIN, 4)
 
-                # Take 511 clocks to measure
-                self.writeParam(SI1145_PARAM_ALSIRADCOUNTER, SI1145_PARAM_ADCCOUNTER_511CLK)
+                # # Take 511 clocks to measure
+                # self.writeParam(SI1145_PARAM_ALSVISADCOUNTER, SI1145_PARAM_ADCCOUNTER_511CLK)
 
-                # in high range mode
-                self.writeParam(SI1145_PARAM_ALSIRADCMISC, 0)
-                #self.writeParam(SI1145_PARAM_ALSIRADCMISC, SI1145_PARAM_ALSIRADCMISC_RANGE)
+        # place the visible sensor in high signal mode
+        self.writeParam(SI1145_PARAM_ALSVISADCMISC, SI1145_PARAM_ALSVISADCMISC_VISRANGE)
+        # self.writeParam(SI1145_PARAM_ALSVISADCMISC, 0)
 
-                # fastest clocks, clock div 1
-                #self.writeParam(SI1145_PARAM_ALSVISADCGAIN, 0)
-                self.writeParam(SI1145_PARAM_ALSVISADCGAIN, 4)
+        # measurement rate for auto
+        self._device.write8(SI1145_REG_MEASRATE0, 0xFF) # 255 * 31.25uS = 8ms
 
-                # Take 511 clocks to measure
-                self.writeParam(SI1145_PARAM_ALSVISADCOUNTER, SI1145_PARAM_ADCCOUNTER_511CLK)
+        # auto run
+        self._device.write8(SI1145_REG_COMMAND, SI1145_PSALS_AUTO)
 
-                # in high range mode (not normal signal)
-                #self.writeParam(SI1145_PARAM_ALSVISADCMISC, SI1145_PARAM_ALSVISADCMISC_VISRANGE)
-                self.writeParam(SI1145_PARAM_ALSVISADCMISC, 0)
+    # returns the UV index * 100 (divide by 100 to get the index)
+    def readUV(self):
+        return self._device.readU16LE(0x2C)
 
-                # measurement rate for auto
-                self._device.write8(SI1145_REG_MEASRATE0, 0xFF) # 255 * 31.25uS = 8ms
+    # returns visible + IR light levels
+    def readVisible(self):
+        # gain was reduced by 14.5 to prevent overflow so here we bump it back up
+        return self._device.readU16LE(0x22)
 
-                # auto run
-                self._device.write8(SI1145_REG_COMMAND, SI1145_PSALS_AUTO)
+    #returns IR light levels
+    def readIR(self):
+        # gain was reduced by 14.5 to prevent overflow so here we bump it back up
+        return self._device.readU16LE(0x24)
 
-        # returns the UV index * 100 (divide by 100 to get the index)
-        def readUV(self):
-                return self._device.readU16LE(0x2C)
-
-        #returns visible + IR light levels
-        def readVisible(self):
-                return self._device.readU16LE(0x22)
-
-        #returns IR light levels
-        def readIR(self):
-                return self._device.readU16LE(0x24)
-
-        # Returns "Proximity" - assumes an IR LED is attached to LED
-        def readProx(self):
-                return self._device.readU16LE(0x26)
+    # Returns "Proximity" - assumes an IR LED is attached to LED
+    def readProx(self):
+        return self._device.readU16LE(0x26)
 
