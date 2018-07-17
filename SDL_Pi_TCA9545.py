@@ -1,10 +1,13 @@
-# SDL_Pi_TCA9545.py Python Driver Code
-# SwitchDoc Labs April 1, 2015
-# V 1.2
+# -*- coding:utf-8 -*-
+"""Driver code for Switch Doc Labs TCA9545 (4-channel I2C Mux)
+
+This file is a modifed version of that supplied by Switch Doc Labs.
+It was derived from their v1.2 April 1, 2015 file.
+
+"""
 from datetime import datetime
 import smbus
 
-# constants
 
 # I2C ADDRESS/BITS
 TCA9545_ADDRESS =                         (0x73)    # 1110011 (A0+A1=VDD)
@@ -18,7 +21,7 @@ TCA9545_CONFIG_BUS2  =                (0x04)  # 1 = enable, 0 = disable
 TCA9545_CONFIG_BUS3  =                (0x08)  # 1 = enable, 0 = disable
 
 
-class SDL_Pi_TCA9545():
+class i2c_mux():
 
     ###########################
     # TCA9545 Code

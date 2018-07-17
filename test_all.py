@@ -9,13 +9,15 @@ import json
 import requests
 
 import Image
+from influxdb import InfluxDBClient
 
 import Adafruit_BMP.BMP280 as BMP280
 import Adafruit_SSD1306
 #import Adafruit_HTU21D as HTU21D
 import HTU21D
 from tentacle_pi.AM2315 import AM2315
-import SDL_Pi_TCA9545
+# import SDL_Pi_TCA9545
+from SDL_Pi_TCA9545 import i2c_mux
 import SDL_Pi_SI1145.SDL_Pi_SI1145 as SI1145
 from SDL_Pi_SI1145 import SI1145Lux
 import SDL_DS3231
@@ -23,10 +25,12 @@ import SDL_Pi_INA3221
 import SDL_Pi_WeatherRack as SDL_Pi_WeatherRack
 import Scroll_SSD1306
 from ISStreamer.Streamer import Streamer
+import paho.mqtt.client as paho
 
+from collections import deque
 # setup our constants
-BASE_URL = 'https://dweet.io'
-THING_NAME = 'argo_weather'
+# BASE_URL = 'https://dweet.io'
+# THING_NAME = 'argo_weather'
 
 TCA9545_ADDRESS = (0x73)  # 1110011 (A0+A1=VDD)
 TCA9545_REG_CONFIG = (0x00)  # config register (R/W)
@@ -48,21 +52,36 @@ SDL_MODE_DELAY = 1  # Delay mode means to wait for sampleTime and the average af
 
 
 
+# TB_ACCESS_TOKEN = "P9ByHW2cd0HXAWekp7Zj"
+
+# MQTT_BROKER = "192.168.2.143"
+# MQTT_PORT = 1883
+# MQTT_USERNAME = "weatherpi"
+# MQTT_PASSWORD = "eQuest123!"
+
+# def publish_mqtt(topic, value):
+#     logging.info('mqtt')
+#     pass
+#     #mqtt = paho.Client("weatherpi")
+#     #mqtt.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+#     #mqtt.connect(MQTT_BROKER)
+#     #mqtt.publish(topic, value)
+
 class WeatherStation(object):
 
     def __init__(self):
         self._i2cmux = None
-        self._oled = None
         self._sunlight = None
         self._barometer = None
         self._outdoor_temp = None
-        self._internal_humidity = None;
+        self._internal_humidity = None
         self._rtc = None
         self._sun_air_plus = None
         self._weather_rack = None
-        self._streamer = Streamer(bucket_name="home_weather",
-                                  bucket_key="KR94XVYKHWFC",
-                                  access_key="UaeqE0c39H11vThRQnW1YY8Jl4dZn0Nu")
+
+        # setup queue for rain totals
+        # length is set for 1 reading every 10s for 1 hour
+        self._rain_last_60 = deque(maxlen=360)
 
 
     def _returnPercentLeftInBattery(self, current_voltage, max_volt):
@@ -105,37 +124,12 @@ class WeatherStation(object):
 
     def test_i2c_mux(self):
         logging.info('Testing I2C 4 Channel Mux...')
-        try:
-            self._i2cmux = SDL_Pi_TCA9545.SDL_Pi_TCA9545(addr=TCA9545_ADDRESS, bus_enable=TCA9545_CONFIG_BUS0)
-            self._i2cmux.write_control_register(TCA9545_CONFIG_BUS2)
-            logging.info('I2C Mux is present and operating normally (TCA9545)')
-        except:
-            logging.error('I2C Mux tests Failed')
-
-
-    def test_oled_display(self):
-        if self._i2cmux is None:
-            self.test_i2c_mux()
-
-        self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
-
-        logging.info('Testing OLED Display...')
-        try:
-            self._oled = Adafruit_SSD1306.SSD1306_128_64(rst=RST, i2c_address=0x3C)
-            self._oled.begin()
-            self._oled.clear()
-            self._oled.display()
-
-            # image = Image.open('happycat_oled_64.ppm').convert('1')
-            # self._oled.image(image)
-            # self._oled.display()
-            # time.sleep(1)
-            # self._oled.clear()
-            # self._oled.display()
-            logging.info('OLED Display Test was Successful (SSD1306)')
-            self._i2cmux.write_control_register(TCA9545_CONFIG_BUS2)
-        except:
-            logging.error('OLED Display Test Failed')
+        # try:
+        #     self._i2cmux = SDL_Pi_TCA9545.SDL_Pi_TCA9545(addr=TCA9545_ADDRESS, bus_enable=TCA9545_CONFIG_BUS0)
+        #     self._i2cmux.write_control_register(TCA9545_CONFIG_BUS2)
+        #     logging.info('I2C Mux is present and operating normally (TCA9545)')
+        # except:
+        #     logging.error('I2C Mux tests Failed')
 
 
     def test_sunlight_sensor(self):
@@ -164,11 +158,10 @@ class WeatherStation(object):
 
 
     def test_barometric_pressure(self):
-        if self._i2cmux is None:
-            self.test_i2c_mux()
+        # if self._i2cmux is None:
+        #     self.test_i2c_mux()
 
-        self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
-
+        # self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
         logging.info('Testing Barometric Pressure Sensor (BMP280)...')
         try:
             self._barometer = BMP280.BMP280()
@@ -179,14 +172,14 @@ class WeatherStation(object):
             logging.info('Barometric Pressure Test was Successful (BMP280)')
 
         except Exception as exc:
-            logging.error('Sunlight Sensor Test Failed')
+            logging.error('Barometric Pressure Test Failed')
 
 
     def test_outdoor_temp(self):
-        if self._i2cmux is None:
-            self.test_i2c_mux()
+        # if self._i2cmux is None:
+        #     self.test_i2c_mux()
 
-        self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
+        # self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
 
         logging.info('Testing Outdoor Temperature Sensor (AM2315)...')
         try:
@@ -205,14 +198,14 @@ class WeatherStation(object):
 
 
     def test_real_time_clock(self):
-        if self._i2cmux is None:
-            self.test_i2c_mux()
+        # if self._i2cmux is None:
+        #     self.test_i2c_mux()
 
-        self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
+        # self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
 
         logging.info('Testing Real Time Clock (DS3231)...')
         try:
-            start_time = datetime.utcnow()
+            # start_time = datetime.utcnow()
             self._rtc = SDL_DS3231.SDL_DS3231(1, 0x68)
 
             self._rtc.write_now()
@@ -224,10 +217,10 @@ class WeatherStation(object):
             logging.error('Real Time Clock Test Failed')
 
     def test_internal_humidity(self):
-        if self._i2cmux is None:
-            self.test_i2c_mux()
+        # if self._i2cmux is None:
+        #     self.test_i2c_mux()
 
-        self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
+        # self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
 
         logging.info('Testing HTU21D-F Humidity Sensor...')
         try:
@@ -242,48 +235,48 @@ class WeatherStation(object):
             print exc
 
     def test_solar_power_controller(self):
-        if self._i2cmux is None:
-            self.test_i2c_mux()
+        # if self._i2cmux is None:
+        #     self.test_i2c_mux()
 
-        self._i2cmux.write_control_register(TCA9545_CONFIG_BUS2)
+        # self._i2cmux.write_control_register(TCA9545_CONFIG_BUS2)
         logging.info('Testing Solar Power Controller (INA3221)...')
-        try:
-            self._sun_air_plus = SDL_Pi_INA3221.SDL_Pi_INA3221(addr=0x40)
-            bus_voltage_1 = self._sun_air_plus.getBusVoltage_V(LIPO_BATTERY_CHANNEL)
-            logging.info('Bus Voltage 1: %.2f', bus_voltage_1)
+        # try:
+        #     self._sun_air_plus = SDL_Pi_INA3221.SDL_Pi_INA3221(addr=0x40)
+        #     bus_voltage_1 = self._sun_air_plus.getBusVoltage_V(LIPO_BATTERY_CHANNEL)
+        #     logging.info('Bus Voltage 1: %.2f', bus_voltage_1)
 
-            shunt_voltage_1 = self._sun_air_plus.getShuntVoltage_mV(LIPO_BATTERY_CHANNEL)
-        	# minus is to get the "sense" right.   - means the battery is charging, + that it is discharging
-            battery_current = self._sun_air_plus.getCurrent_mA(LIPO_BATTERY_CHANNEL)
-            battery_voltage = bus_voltage_1 + (shunt_voltage_1 / 1000)
-            battery_power = battery_voltage * (battery_current/1000)
-            logging.info('Battery Current: %.2f mA', battery_current)
+        #     shunt_voltage_1 = self._sun_air_plus.getShuntVoltage_mV(LIPO_BATTERY_CHANNEL)
+        # 	# minus is to get the "sense" right.   - means the battery is charging, + that it is discharging
+        #     battery_current = self._sun_air_plus.getCurrent_mA(LIPO_BATTERY_CHANNEL)
+        #     battery_voltage = bus_voltage_1 + (shunt_voltage_1 / 1000)
+        #     battery_power = battery_voltage * (battery_current/1000)
+        #     logging.info('Battery Current: %.2f mA', battery_current)
 
-            bus_voltage_2 = self._sun_air_plus.getBusVoltage_V(SOLAR_CELL_CHANNEL)
-            shunt_voltage_2 = self._sun_air_plus.getShuntVoltage_mV(SOLAR_CELL_CHANNEL)
-            solar_current = -self._sun_air_plus.getCurrent_mA(SOLAR_CELL_CHANNEL)
-            solar_voltage = bus_voltage_2 + (shunt_voltage_2 / 1000)
-            solar_power = solar_voltage * (solar_current/1000)
-            logging.info('Solar Current: %.2f mA', solar_current)
+        #     bus_voltage_2 = self._sun_air_plus.getBusVoltage_V(SOLAR_CELL_CHANNEL)
+        #     shunt_voltage_2 = self._sun_air_plus.getShuntVoltage_mV(SOLAR_CELL_CHANNEL)
+        #     solar_current = -self._sun_air_plus.getCurrent_mA(SOLAR_CELL_CHANNEL)
+        #     solar_voltage = bus_voltage_2 + (shunt_voltage_2 / 1000)
+        #     solar_power = solar_voltage * (solar_current/1000)
+        #     logging.info('Solar Current: %.2f mA', solar_current)
 
-            bus_voltage_3 = self._sun_air_plus.getBusVoltage_V(OUTPUT_CHANNEL)
-            shunt_voltage_3 = self._sun_air_plus.getShuntVoltage_mV(OUTPUT_CHANNEL)
-            load_current = self._sun_air_plus.getCurrent_mA(OUTPUT_CHANNEL)
-            load_voltage = bus_voltage_3
-            load_power = load_voltage * (load_current/1000)
+        #     bus_voltage_3 = self._sun_air_plus.getBusVoltage_V(OUTPUT_CHANNEL)
+        #     shunt_voltage_3 = self._sun_air_plus.getShuntVoltage_mV(OUTPUT_CHANNEL)
+        #     load_current = self._sun_air_plus.getCurrent_mA(OUTPUT_CHANNEL)
+        #     load_voltage = bus_voltage_3
+        #     load_power = load_voltage * (load_current/1000)
 
-            battery_charge = self._returnPercentLeftInBattery(battery_voltage, 4.19)
-            logging.info('Battery Charge: %.2f', battery_charge)
-            logging.info('Solar Power Controller Test was Successful (INA3221)')
+        #     battery_charge = self._returnPercentLeftInBattery(battery_voltage, 4.19)
+        #     logging.info('Battery Charge: %.2f', battery_charge)
+        #     logging.info('Solar Power Controller Test was Successful (INA3221)')
 
-        except Exception as exc:
-            logging.error('Solar Power Controller Test Failed')
+        # except Exception as exc:
+        #     logging.error('Solar Power Controller Test Failed')
 
     def test_weather_rack(self):
-        if self._i2cmux is None:
-            self.test_i2c_mux()
+        # if self._i2cmux is None:
+        #     self.test_i2c_mux()
 
-        self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
+        # self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
         logging.info('Testing Weather Rack (INA3221)...')
         self._weather_rack = SDL_Pi_WeatherRack.SDL_Pi_WeatherRack(ANEMOMETER_PIN, RAIN_PIN, 0,0, SDL_MODE_I2C_ADS1015)
         self._weather_rack.setWindMode(SDL_MODE_SAMPLE, 5.0)
@@ -310,127 +303,210 @@ class WeatherStation(object):
         pass
 
 
-    def send_dweet(self, payload):
-        url = '{0}/dweet/for/{1}'.format(BASE_URL, THING_NAME)
-        data = json.dumps(payload)
-        headers = {'Content-type': 'application/json'}
+    # def send_dweet(self, payload):
+    #     url = '{0}/dweet/for/{1}'.format(BASE_URL, THING_NAME)
+    #     data = json.dumps(payload)
+    #     headers = {'Content-type': 'application/json'}
 
-        request_func = getattr(requests, 'post')
-        response = request_func(url, data=data, headers=headers)
+    #     request_func = getattr(requests, 'post')
+    #     response = request_func(url, data=data, headers=headers)
 
-        # raise an exception if request is not successful
-        #print response.status_code
-        # if not response.status_code == requests.codes.ok:
-        #     print'HTTP {0} response'.format(response.status_code)
-        #     # raise DweepyError('HTTP {0} response'.format(response.status_code))
-        response_json = response.json()
-        if response_json['this'] == 'failed':
-            print response_json['because']
-            # raise DweepyError(response_json['because'])
-        return response_json['with']
+    #     # raise an exception if request is not successful
+    #     #print response.status_code
+    #     # if not response.status_code == requests.codes.ok:
+    #     #     print'HTTP {0} response'.format(response.status_code)
+    #     #     # raise DweepyError('HTTP {0} response'.format(response.status_code))
+    #     response_json = response.json()
+    #     if response_json['this'] == 'failed':
+    #         print response_json['because']
+    #         # raise DweepyError(response_json['because'])
+    #     return response_json['with']
+
+    # def send_to_thingsboard(self, payload):
+    #     url = 'http://data.robgillen.com:8080/api/v1/{0}/telemetry'.format(TB_ACCESS_TOKEN)
+
+    #     # remove the timestamp from the payload
+    #     payload.pop('timestamp')
+
+    #     tb_wrapper = {
+    #         'ts': int(time.time() * 1000),
+    #         'values': payload
+    #     }
+
+    #     data = json.dumps(tb_wrapper)
+    #     headers = {'Content-type': 'application/json'}
+    #     request_func = getattr(requests, 'post')
+    #     response = request_func(url, data=data, headers=headers)
+
+    #     # raise an exception if request is not successful
+    #     #print response.status_code
+    #     # if not response.status_code == requests.codes.ok:
+    #     #     print'HTTP {0} response'.format(response.status_code)
+    #     #     # raise DweepyError('HTTP {0} response'.format(response.status_code))
+    #     # response_json = response.json()
+    #     # if response_json['this'] == 'failed':
+    #     #     print response_json['because']
+    #     #     # raise DweepyError(response_json['because'])
+
+    def send_to_influxdb(self, data):
+        """Helper to package and send to influxdb"""
+        user = 'weather'
+        password = 'eQuest123!'
+        dbname = 'homedb'
+        host = '192.168.2.143'
+        port = 8086
+
+        json_body = [
+            {
+                "measurement": "local_weather",
+                "time": datetime.utcnow().isoformat(),
+            }
+        ]
+
+        json_body[0]['fields'] = data
+
+        client = InfluxDBClient(host, port, user, password, dbname)
+        client.write_points(json_body)
+
+        client.close()
 
 
 
     def run_loop(self):
+        counter = 0
+        #outside_temperature = 0
+        #outside_humidity = 0
+
+
         while True:
             try:
-                self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
+                # self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
 
-                internal_temp = (self._barometer.read_temperature()*1.8) + 32
-                pressure = self._barometer.read_pressure()
-                altitude = self._barometer.read_altitude()
-                sealevel_pressure = self._barometer.read_sealevel_pressure()
+                if self._barometer:
+                    internal_temp = (self._barometer.read_temperature()*1.8) + 32
+                    pressure = self._barometer.read_pressure()
+                    altitude = self._barometer.read_altitude()
+                    sealevel_pressure = self._barometer.read_sealevel_pressure()
+                else:
+                    internal_temp = 0.00
+                    pressure = 0.00
+                    altitude = 0.00
+                    sealevel_pressure = 0.00
+                    self.test_barometric_pressure()
 
-                outside_temperature, outside_humidity, crc_check = self._outdoor_temp.sense()
+
+                crc_check = -1
+                while crc_check <> 0:
+                    outside_temperature, outside_humidity, crc_check = self._outdoor_temp.sense()
+                    logging.info("pausing for temperature...")
+                    time.sleep(1)
                 outside_temperature = (outside_temperature * 1.8) + 32
                 wind_speed = self._weather_rack.current_wind_speed()/1.6
                 wind_gust = self._weather_rack.get_wind_gust()/1.6
-                wind_direction = self._weather_rack.current_wind_direction()
+                wind_direction = float(self._weather_rack.current_wind_direction())
                 wind_direction_voltage = self._weather_rack.current_wind_direction_voltage()
+                total_rain_raw = self._weather_rack.get_current_rain_total()
+                logging.info("total_rain_raw: %f", total_rain_raw)
+                total_rain = total_rain_raw/25.4
+                logging.info("total_rain: %f", total_rain)
+                self._rain_last_60.append(total_rain_raw)
+                rain_last_60 = sum(self._rain_last_60)/25.4
+                logging.info("rain_last_60: %f", rain_last_60)
+
 
                 internal_temp_2 = ((self._internal_humidity.read_temperature()*1.8) + 32)
                 internal_humidity = self._internal_humidity.read_humidity()
+                # self._i2cmux.write_control_register(TCA9545_CONFIG_BUS2)
+                # bus_voltage_1 = self._sun_air_plus.getBusVoltage_V(LIPO_BATTERY_CHANNEL)
+                # shunt_voltage_1 = self._sun_air_plus.getShuntVoltage_mV(LIPO_BATTERY_CHANNEL)
+                # # minus is to get the "sense" right.   - means the battery is charging, + that it is discharging
+                # battery_current = self._sun_air_plus.getCurrent_mA(LIPO_BATTERY_CHANNEL)
+                # battery_voltage = bus_voltage_1 + (shunt_voltage_1 / 1000)
+                # battery_power = battery_voltage * (battery_current/1000)
+                # bus_voltage_2 = self._sun_air_plus.getBusVoltage_V(SOLAR_CELL_CHANNEL)
+                # shunt_voltage_2 = self._sun_air_plus.getShuntVoltage_mV(SOLAR_CELL_CHANNEL)
+                # solar_current = abs(self._sun_air_plus.getCurrent_mA(SOLAR_CELL_CHANNEL))
+                # solar_voltage = bus_voltage_2 + (shunt_voltage_2 / 1000)
+                # solar_power = abs(solar_voltage * (solar_current/1000))
+                # bus_voltage_3 = self._sun_air_plus.getBusVoltage_V(OUTPUT_CHANNEL)
+                # shunt_voltage_3 = self._sun_air_plus.getShuntVoltage_mV(OUTPUT_CHANNEL)
+                # load_current = self._sun_air_plus.getCurrent_mA(OUTPUT_CHANNEL)
+                # load_voltage = bus_voltage_3
+                # load_power = load_voltage * (load_current/1000)
+                # battery_charge = self._returnPercentLeftInBattery(battery_voltage, 4.19)
 
-                self._i2cmux.write_control_register(TCA9545_CONFIG_BUS2)
-
-                bus_voltage_1 = self._sun_air_plus.getBusVoltage_V(LIPO_BATTERY_CHANNEL)
-                shunt_voltage_1 = self._sun_air_plus.getShuntVoltage_mV(LIPO_BATTERY_CHANNEL)
-                # minus is to get the "sense" right.   - means the battery is charging, + that it is discharging
-                battery_current = self._sun_air_plus.getCurrent_mA(LIPO_BATTERY_CHANNEL)
-                battery_voltage = bus_voltage_1 + (shunt_voltage_1 / 1000)
-                battery_power = battery_voltage * (battery_current/1000)
-                bus_voltage_2 = self._sun_air_plus.getBusVoltage_V(SOLAR_CELL_CHANNEL)
-                shunt_voltage_2 = self._sun_air_plus.getShuntVoltage_mV(SOLAR_CELL_CHANNEL)
-                solar_current = abs(self._sun_air_plus.getCurrent_mA(SOLAR_CELL_CHANNEL))
-                solar_voltage = bus_voltage_2 + (shunt_voltage_2 / 1000)
-                solar_power = abs(solar_voltage * (solar_current/1000))
-                bus_voltage_3 = self._sun_air_plus.getBusVoltage_V(OUTPUT_CHANNEL)
-                shunt_voltage_3 = self._sun_air_plus.getShuntVoltage_mV(OUTPUT_CHANNEL)
-                load_current = self._sun_air_plus.getCurrent_mA(OUTPUT_CHANNEL)
-                load_voltage = bus_voltage_3
-                load_power = load_voltage * (load_current/1000)
-                battery_charge = self._returnPercentLeftInBattery(battery_voltage, 4.19)
-
-                sunlight_visible = SI1145Lux.SI1145_VIS_to_Lux(self._sunlight.readVisible())
-                sunlight_ir = SI1145Lux.SI1145_IR_to_Lux(self._sunlight.readIR())
-                sunlight_uv = self._sunlight.readUV()
-                sunlight_uv_index = sunlight_uv / 100.0
+                sunlight_visible = 0 #SI1145Lux.SI1145_VIS_to_Lux(self._sunlight.readVisible())
+                sunlight_ir = 0 #SI1145Lux.SI1145_IR_to_Lux(self._sunlight.readIR())
+                sunlight_uv = 0 #self._sunlight.readUV()
+                sunlight_uv_index = 0 #sunlight_uv / 100.0
 
                 readings = {
-                    'timestamp' : str(datetime.now().isoformat()),
+                    'timestamp' : str(datetime.utcnow().isoformat()),
                     'internal_temp': internal_temp,
-                    'internal_temp_2': internal_temp_2,
                     'internal_humidity': internal_humidity,
-                    'pressure': pressure,
-                    'altitude': altitude,
-                    'sealevel_pressure': sealevel_pressure,
                     'outside_temp': outside_temperature,
                     'outside_humidity': outside_humidity,
-                    'crc_check': crc_check,
-                    'bus_voltage_1': bus_voltage_1,
-                    'shunt_voltage_1': shunt_voltage_1,
-                    'battery_current': battery_current,
-                    'battery_voltage': battery_voltage,
-                    'battery_power': battery_power,
-                    'bus_voltage_2': bus_voltage_2,
-                    'shunt_voltage_2': shunt_voltage_2,
-                    'solar_current': solar_current,
-                    'solar_voltage': solar_voltage,
-                    'solar_power': solar_power,
-                    'bus_voltage_3': bus_voltage_3,
-                    'load_current': load_current,
-                    'load_voltage': load_voltage,
-                    'load_power': load_power,
-                    'battery_charge': battery_charge,
-                    'sunlight_visible': sunlight_visible,
-                    'sunlight_ir': sunlight_ir,
-                    'sunlight_uv': sunlight_uv,
-                    'sunlight_uv_index': sunlight_uv_index,
+                    # 'battery_charge': float(battery_charge),
                     'wind_speed': wind_speed,
                     'wind_gust': wind_gust,
+
+                    # 'battery_power': battery_power,
+                    # 'solar_power': solar_power,
+                    # 'load_power': load_power,
+
+                    # 'battery_current': battery_current,
+                    # 'load_current': load_current,
+                    # 'solar_current': solar_current,
+
+                    # 'load_voltage': load_voltage,
+                    # 'solar_voltage': solar_voltage,
+                    # 'battery_voltage': battery_voltage,
+                    'pressure': pressure,
                     'wind_direction': wind_direction,
-                    'wind_direction_voltage': wind_direction_voltage
+
+                    'total_rain': total_rain,
+                    'rain_last_60': rain_last_60,
+
+                    'altitude': altitude,
+                    'sealevel_pressure': sealevel_pressure,
+
+
+                    # 'sunlight_visible': sunlight_visible,
+                    # 'sunlight_ir': sunlight_ir,
+                    # 'sunlight_uv': sunlight_uv,
+                    # 'sunlight_uv_index': sunlight_uv_index,
+
+
+                    # 'bus_voltage_1': bus_voltage_1,
+                    # 'shunt_voltage_1': shunt_voltage_1,
+                    # 'bus_voltage_2': bus_voltage_2,
+                    # 'shunt_voltage_2': shunt_voltage_2,
+                    # 'bus_voltage_3': bus_voltage_3,
+                    'wind_direction_voltage': wind_direction_voltage,
+                    'internal_temp_2': internal_temp_2,
+                    'crc_check': crc_check
                 }
 
                 # self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
-                # Scroll_SSD1306.addLineOLED(self._oled,"%s" % self._rtc.read_datetime())
-                # Scroll_SSD1306.addLineOLED(self._oled,  ("Wind Speed=\t%0.2f MPH") % wind_speed)
-                # Scroll_SSD1306.addLineOLED(self._oled,  "Wind Dir=%0.2f Degrees" % wind_direction)
-                # Scroll_SSD1306.addLineOLED(self._oled,  ("Int Temp=\t%0.2f F") % internal_temp)
-                # Scroll_SSD1306.addLineOLED(self._oled,  ("Ext Temp=\t%0.2f F") % outside_temperature)
-                # Scroll_SSD1306.addLineOLED(self._oled,  ("Battery=\t%0.2f F") % battery_charge)
 
                 #print readings
                 if crc_check == 0:
-                    with open('weather.log', 'a') as logfile:
-                        logfile.write(json.dumps(readings) + '\n')
-                    self._streamer.log_object(readings, key_prefix="some_dict")
-                    self.send_dweet(readings)
+                    self.send_to_influxdb(readings)
+                    # if counter >= 12:
+                        # with open('weather.log', 'a') as logfile:
+                        #     logfile.write(json.dumps(readings) + '\n')
+                        # self._streamer.log_object(readings, key_prefix="some_dict")
+                        # self.send_dweet(readings)
+                        #self.send_to_thingsboard(readings)
                 else:
                     logging.info("CRC Failed: %i", crc_check)
-                time.sleep(59)
-            except IOError:
+
+                time.sleep(10)
+
+            except IOError as ioerr:
                 logging.warn('Unable to read values due to an IO Error... Retrying')
+                logging.warn(ioerr.errno)
+                logging.warn(ioerr.message)
                 time.sleep(5)
 
 
@@ -441,10 +517,10 @@ def main():
     logging.info('** Weather Station System Test Starting **')
 
     station = WeatherStation()
-    station.test_i2c_mux()
-    # station.test_oled_display()
+    # station.test_i2c_mux()
+    # station.test_sunlight_sensor()
+    
     station.test_internal_humidity()
-    station.test_sunlight_sensor()
     station.test_barometric_pressure()
     station.test_outdoor_temp()
     station.test_real_time_clock()
