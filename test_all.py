@@ -401,6 +401,7 @@ class WeatherStation(object):
                     logging.info("pausing for temperature...")
                     time.sleep(1)
                 outside_temperature = (outside_temperature * 1.8) + 32
+                logging.info("outside_temperature: %f", outside_temperature)
                 wind_speed = self._weather_rack.current_wind_speed()/1.6
                 wind_gust = self._weather_rack.get_wind_gust()/1.6
                 wind_direction = float(self._weather_rack.current_wind_direction())
