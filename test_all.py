@@ -370,13 +370,52 @@ class WeatherStation(object):
 
         client.close()
 
+    def sendWeatherUndergroundData(self, currentWindSpeed, currentWindGust, outsideTemperature, outsideHumidity, currentWindDirection, rain60Minutes, bmp180SeaLevel): 
+
+        # https://weatherstation.wunderground.com/weatherstation/updateweatherstation.php?ID=KCASANFR5&PASSWORD=XXXXXX&dateutc=2000-01-01+10%3A32%3A35&winddir=230&windspeedmph=12&windgustmph=12&tempf=70&rainin=0&baromin=29.1&dewptf=68.2&humidity=90&weather=&clouds=&softwaretype=vws%20versionxx&action=updateraw	
+
+        # build the URL
+        myURL = "ID="+"KTNKNOXV230"
+        myURL += "&PASSWORD="+"o4c21o1u"
+        myURL += "&dateutc=now"
+
+        # now weather station variables
+        # convert wind direction based on actual direction...
+        currentWindDirection = (currentWindDirection + 90)
+        if (currentWindDirection >= 360):
+            currentWindDirection - 360
+
+        myURL += "&winddir=%i" % currentWindDirection
+        #print "cws=|",currentWindSpeed
+
+        myURL += "&windspeedmph=%0.2f" % currentWindSpeed 
+        myURL += "&windgustmph=%0.2f" % currentWindGust
+
+        myURL += "&humidity=%i" % outsideHumidity
+        myURL += "&tempf=%0.2f" % outsideTemperature
+
+        #dewpoint =  outsideTemperature - ((100.0 - outsideHumidity) / 5.0);
+        #dewpointf = ((dewpoint*9.0/5.0)+32.0)
+        #myURL += "&dewptf=%0.2f" % dewpointf 
+
+        myURL += "&rainin=%0.2f" % rain60Minutes
+        myURL += "&baromin=%0.2f" % ((bmp180SeaLevel) * 0.2953)
+        myURL += "&softwaretype=GillenWx"
+        
+        # print "myURL=", myURL
+        # send it
+        r = requests.get("https://weatherstation.wunderground.com/weatherstation/updateweatherstation.php", params=myURL)
+
+        print(r.url)
+        print(r.text)
+        print "GET sent"
 
 
     def run_loop(self):
         counter = 0
         #outside_temperature = 0
         #outside_humidity = 0
-
+        BMP280_Altitude_Meters = 282.85
 
         while True:
             try:
@@ -386,7 +425,7 @@ class WeatherStation(object):
                     internal_temp = (self._barometer.read_temperature()*1.8) + 32
                     pressure = self._barometer.read_pressure()
                     altitude = self._barometer.read_altitude()
-                    sealevel_pressure = self._barometer.read_sealevel_pressure()
+                    sealevel_pressure = self._barometer.read_sealevel_pressure(BMP280_Altitude_Meters)/1000
                 else:
                     internal_temp = 0.00
                     pressure = 0.00
@@ -469,7 +508,7 @@ class WeatherStation(object):
                     'rain_last_60': rain_last_60,
 
                     'altitude': altitude,
-                    'sealevel_pressure': sealevel_pressure,
+                    'sealevel_pressure': ((sealevel_pressure) * 0.2953),
 
 
                     # 'sunlight_visible': sunlight_visible,
@@ -487,7 +526,13 @@ class WeatherStation(object):
                     'internal_temp_2': internal_temp_2,
                     'crc_check': crc_check
                 }
-
+                
+                try:
+                    logging.info('sealevel_pressure: %0.2f', sealevel_pressure)
+                    self.sendWeatherUndergroundData(wind_speed, wind_gust, outside_temperature, outside_humidity, wind_direction, rain_last_60, sealevel_pressure)
+                except:
+                    pass
+                
                 # self._i2cmux.write_control_register(TCA9545_CONFIG_BUS0)
 
                 #print readings
