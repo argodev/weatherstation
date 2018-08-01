@@ -1,0 +1,37 @@
+{
+    "loop_delay": 10,
+    "antenna1": {
+      "latitude": 35.912917,
+      "longitude": -84.283001
+    },
+    "antenna2": {
+      "latitude": 35.912576,
+      "longitude": -84.282568
+    },
+    "center": {
+      "latitude": 35.912830,
+      "longitude": -84.282846
+    },
+    "fence": [
+      {
+        "latitude": 35.913310,
+        "longitude": -84.285237
+      },
+      {
+        "latitude": 35.911998,
+        "longitude": -84.285237
+      },
+      {
+        "latitude": 35.911998,
+        "longitude": -84.281246
+      },
+      {
+        "latitude": 35.913310,
+        "longitude": -84.281246
+      }
+    ],
+    "flyer": {
+      "latitude": 35.912989,
+      "longitude": -84.282882
+    }
+  }
