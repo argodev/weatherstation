@@ -11,37 +11,23 @@ from signal import SIGHUP, SIGTERM, signal
 
 import requests
 
-import Adafruit_BMP.BMP280 as BMP280
-import Adafruit_SSD1306
-#import Adafruit_HTU21D as HTU21D
-import HTU21D
-import Scroll_SSD1306
-import SDL_DS3231
-import SDL_Pi_INA3221
-import SDL_Pi_SI1145.SDL_Pi_SI1145 as SI1145
-import SDL_Pi_WeatherRack as SDL_Pi_WeatherRack
-from influxdb import InfluxDBClient
-from SDL_Pi_SI1145 import SI1145Lux
-from tentacle_pi.AM2315 import AM2315
+import Adafruit_BMP.BMP280 as BMP280  # Pressure / Internal Temp
+import HTU21D  # internal humidity sensor
+import SDL_DS3231   # real-time clock
+import SDL_Pi_WeatherRack as SDL_Pi_WeatherRack  # wind speed/dir + rain
+from influxdb import InfluxDBClient  # Send to Influx
+from tentacle_pi.AM2315 import AM2315 # Outdoor Temp/Humidity
 
-# setup our constants
-RST = 24  # Raspberry Pi pin configuration
-LIPO_BATTERY_CHANNEL = 1
-SOLAR_CELL_CHANNEL   = 2
-OUTPUT_CHANNEL       = 3
-SUNAIRLED = 25
 ANEMOMETER_PIN = 26
 RAIN_PIN = 21
-SDL_MODE_INTERNAL_AD = 0
-SDL_MODE_I2C_ADS1015 = 1    # internally, the library checks for ADS1115 or ADS1015 if found
-SDL_MODE_SAMPLE = 0  # sample mode means return immediately.  THe wind speed is averaged at sampleTime or when you ask, whichever is longer
+SDL_MODE_I2C_ADS1015 = 0    # internally, the library checks for ADS1115 or ADS1015 if found
+SDL_MODE_SAMPLE = 0  # sample mode means return immediately.  The wind speed is averaged at sampleTime or when you ask, whichever is longer
 SDL_MODE_DELAY = 1  # Delay mode means to wait for sampleTime and the average after that time.
 
 
 class WeatherStation(object):
 
     def __init__(self):
-        self._i2cmux = None
         self._sunlight = None
         self._barometer = None
         self._outdoor_temp = None
@@ -53,8 +39,9 @@ class WeatherStation(object):
         # setup queue for rain totals
         # length is set for 1 reading every 10s for 1 hour
         self._rain_last_60 = deque(maxlen=360)
-        self._rain_today = 0
+        self._rain_today = 0.
         self._rain_today_last_day = datetime.now().day
+
 
     def test_barometric_pressure(self):
         logging.info('Testing Barometric Pressure Sensor (BMP280)...')
@@ -88,6 +75,7 @@ class WeatherStation(object):
             logging.error('Outdoor Temperature Test Failed')
             logging.error(exc.message)
 
+
     def test_real_time_clock(self):
         logging.info('Testing Real Time Clock (DS3231)...')
         try:
@@ -109,13 +97,13 @@ class WeatherStation(object):
         try:
             self._internal_humidity = HTU21D.HTU21D()
             temp = ((self._internal_humidity.read_temperature()*1.8) + 32)
-            logging.info("Internal Temp: %s F", temp)
-            logging.info("Humid: %s %% rH", self._internal_humidity.read_humidity())
-            logging.info('Humidity Sensor Test was Successful (HTU21D-F)')
+            logging.info("\tInternal Temp: %s F", temp)
+            logging.info("\tHumid: %s %% rH", self._internal_humidity.read_humidity())
+            logging.info('\tHumidity Sensor Test was Successful (HTU21D-F)')
 
         except Exception as exc:
-            logging.error('Humidity Sensor Test Failed')
-            logging.error(exc.message)
+            logging.error('\tHumidity Sensor Test Failed')
+            logging.error('\t' + exc.message)
 
     def test_weather_rack(self):
         logging.info('Testing Weather Rack (INA3221)...')
@@ -132,12 +120,12 @@ class WeatherStation(object):
         currentWindDirection = self._weather_rack.current_wind_direction()
         currentWindDirectionVoltage = self._weather_rack.current_wind_direction_voltage()
 
-        logging.info("Rain Total= %0.2f in", (totalRain/25.4))
-        logging.info("Rain Last 60 Minutes= %0.2f in", (rain60Minutes/25.4))
-        logging.info("Wind Speed= %0.2f MPH", (currentWindSpeed/1.6))
-        logging.info("MPH wind_gust= %0.2f MPH", (currentWindGust/1.6))
-        logging.info("Wind Direction= %0.2f Degrees", currentWindDirection)
-        logging.info("Wind Direction Voltage= %0.3f V",  currentWindDirectionVoltage)
+        logging.info("\tRain Total= %0.2f in", (totalRain/25.4))
+        logging.info("\tRain Last 60 Minutes= %0.2f in", (rain60Minutes/25.4))
+        logging.info("\tWind Speed= %0.2f MPH", (currentWindSpeed/1.6))
+        logging.info("\tMPH wind_gust= %0.2f MPH", (currentWindGust/1.6))
+        logging.info("\tWind Direction= %0.2f Degrees", currentWindDirection)
+        logging.info("\tWind Direction Voltage= %0.3f V",  currentWindDirectionVoltage)
 
     def test_lightning_detector(self):
         pass
@@ -150,19 +138,17 @@ class WeatherStation(object):
         host = '192.168.2.143'
         port = 8086
 
-        json_body = [
-            {
-                "measurement": "local_weather",
-                "time": datetime.utcnow().isoformat(),
-            }
-        ]
+        json_body = [{
+            "measurement": "local_weather",
+            "time": datetime.utcnow().isoformat(),
+        }]
 
         json_body[0]['fields'] = data
 
         client = InfluxDBClient(host, port, user, password, dbname)
         client.write_points(json_body)
-
         client.close()
+
 
     def sendWeatherUndergroundData(self, currentWindSpeed, currentWindGust, outsideTemperature, outsideHumidity, currentWindDirection, rain60Minutes, bmp180SeaLevel, dewpointf, dailyrainin): 
 
@@ -185,27 +171,21 @@ class WeatherStation(object):
         myURL += "&humidity=%i" % outsideHumidity
         myURL += "&tempf=%0.2f" % outsideTemperature
         myURL += "&dewptf=%0.2f" % dewpointf
-
         myURL += "&dailyrainin=%0.2f" % dailyrainin
         myURL += "&rainin=%0.2f" % rain60Minutes
         myURL += "&baromin=%0.2f" % ((bmp180SeaLevel) * 0.2953)
         myURL += "&softwaretype=GillenWx"
         
         # send it
-        r = requests.get("https://weatherstation.wunderground.com/weatherstation/updateweatherstation.php", params=myURL)
-        logging.info(r.url)
-        logging.info(r.text)
+        requests.get("https://weatherstation.wunderground.com/weatherstation/updateweatherstation.php", params=myURL)
 
 
     def run_loop(self):
-        counter = 0
-        #outside_temperature = 0
-        #outside_humidity = 0
         BMP280_Altitude_Meters = 282.85
+        logging.info('Temp  Humid Press  DewPt Wind Gust Dir R60 RDay')
 
         while True:
             try:
-
                 if self._barometer:
                     internal_temp = (self._barometer.read_temperature()*1.8) + 32
                     pressure = self._barometer.read_pressure()
@@ -221,21 +201,17 @@ class WeatherStation(object):
                 outside_temperature, outside_humidity, crc_check = self._outdoor_temp.sense()
                 # calculate dew_point while still in C
                 dew_point =  outside_temperature - ((100.0 - outside_humidity) / 5.0)
-                dew_point = ((dew_point * 9.0 / 5.0) + 32.0) 
+                dew_point = ((dew_point * 9.0 / 5.0) + 32.0)                 
                 outside_temperature = (outside_temperature * 1.8) + 32
-                logging.info("outside_temperature: %f", outside_temperature)
                 wind_speed = self._weather_rack.current_wind_speed()/1.6
                 wind_gust = self._weather_rack.get_wind_gust()/1.6
                 wind_direction = float(self._weather_rack.current_wind_direction())
                 wind_direction_voltage = self._weather_rack.current_wind_direction_voltage()
                 total_rain_raw = self._weather_rack.get_current_rain_total()
-                logging.info("total_rain_raw: %f", total_rain_raw)
                 total_rain = total_rain_raw/25.4
-                logging.info("total_rain: %f", total_rain)
                 self._rain_last_60.append(total_rain_raw)
                 rain_last_60 = sum(self._rain_last_60)/25.4
-                logging.info("rain_last_60: %f", rain_last_60)
-
+                
                 if datetime.now().day == self._rain_today_last_day:
                     self._rain_today += total_rain
                 else:
@@ -265,21 +241,29 @@ class WeatherStation(object):
                     'internal_temp_2': internal_temp_2,
                     'crc_check': crc_check
                 }
-                
-                try:
-                    logging.info('sealevel_pressure: %0.2f', sealevel_pressure)
-                    logging.info('rain_today: %0.2f', self._rain_today)
-                    if crc_check:
-                        self.sendWeatherUndergroundData(wind_speed, wind_gust, outside_temperature, outside_humidity, wind_direction, rain_last_60, sealevel_pressure, dew_point, self._rain_today)
-                except Exception as e:
-                    logging.error(e.message)
 
+                logging.info('%.02f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f', outside_temperature, outside_humidity, sealevel_pressure, dew_point, wind_speed, wind_gust, wind_direction, rain_last_60, self._rain_today)
+
+                # try:
+                #     #if crc_check:
+                #         #self.sendWeatherUndergroundData(wind_speed, wind_gust, outside_temperature, outside_humidity, wind_direction, rain_last_60, sealevel_pressure, dew_point, self._rain_today)
+                # except Exception as e:
+                #     logging.error(e.message)
+
+
+
+                # except:
+                #     pass
+                
                 #print readings
                 if crc_check:
                     self.send_to_influxdb(readings)
                     # if counter >= 12:
                         # with open('weather.log', 'a') as logfile:
                         #     logfile.write(json.dumps(readings) + '\n')
+                        # self._streamer.log_object(readings, key_prefix="some_dict")
+                        # self.send_dweet(readings)
+                        #self.send_to_thingsboard(readings)
                 else:
                     logging.info("CRC Failed: %i", crc_check)
 
@@ -298,37 +282,32 @@ def main():
     logging.basicConfig(format=log_format, level=logging.INFO)
     logging.info('** GillenWx Weather Station System Starting **')
     start_time = time.time()
-  
+
     def signal_handler(*args):
         """ handles shutting down via signals """
         if station:
             pass
-            #station.shutdown()
 
     try:
         signal(SIGTERM, signal_handler)
         signal(SIGHUP, signal_handler)
 
-        station = WeatherStation()    
+        station = WeatherStation()   
         station.test_internal_humidity()
         station.test_barometric_pressure()
         station.test_outdoor_temp()
         station.test_real_time_clock()
         station.test_weather_rack()
         logging.info('** Weather Station System Test Complete **')
-
         station.run_loop()
 
-        # lightning detector
-        # rain bucket
+        # lightning detetor
 
     except KeyboardInterrupt:
         logging.info('Shutdown requested. Cleaning up...')
-        #station.shutdown()
 
     logging.info("Script Finished")
     logging.info("Elapsed Time: %s seconds ", (time.time() - start_time))
-
 
 if __name__ == "__main__":
     main()
