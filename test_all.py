@@ -18,9 +18,12 @@ import SDL_Pi_WeatherRack as SDL_Pi_WeatherRack  # wind speed/dir + rain
 from influxdb import InfluxDBClient  # Send to Influx
 from tentacle_pi.AM2315 import AM2315 # Outdoor Temp/Humidity
 
+import SDL_Pi_INA3221 # this is needed for the ADC used for wind direction
+
+
 ANEMOMETER_PIN = 26
 RAIN_PIN = 21
-SDL_MODE_I2C_ADS1015 = 0    # internally, the library checks for ADS1115 or ADS1015 if found
+SDL_MODE_I2C_ADS1015 = 1    # internally, the library checks for ADS1115 or ADS1015 if found
 SDL_MODE_SAMPLE = 0  # sample mode means return immediately.  The wind speed is averaged at sampleTime or when you ask, whichever is longer
 SDL_MODE_DELAY = 1  # Delay mode means to wait for sampleTime and the average after that time.
 
@@ -41,6 +44,8 @@ class WeatherStation(object):
         self._rain_last_60 = deque(maxlen=360)
         self._rain_today = 0.
         self._rain_today_last_day = datetime.now().day
+        if datetime.now().year == 2018 and datetime.now().month==8 and datetime.now().day==16:
+            self._rain_today = 0.03
 
 
     def test_barometric_pressure(self):
@@ -177,8 +182,8 @@ class WeatherStation(object):
         myURL += "&softwaretype=GillenWx"
         
         # send it
-        requests.get("https://weatherstation.wunderground.com/weatherstation/updateweatherstation.php", params=myURL)
-
+        r = requests.get("https://weatherstation.wunderground.com/weatherstation/updateweatherstation.php", params=myURL)
+        #print(r.url)
 
     def run_loop(self):
         BMP280_Altitude_Meters = 282.85
@@ -213,10 +218,12 @@ class WeatherStation(object):
                 rain_last_60 = sum(self._rain_last_60)/25.4
                 
                 if datetime.now().day == self._rain_today_last_day:
+                    #print('adding')
                     self._rain_today += total_rain
                 else:
+                    #print('new')
                     self._rain_today = total_rain
-                    self.rain_today_last_day = datetime.now().day
+                    self._rain_today_last_day = datetime.now().day
 
                 internal_temp_2 = ((self._internal_humidity.read_temperature()*1.8) + 32)
                 internal_humidity = self._internal_humidity.read_humidity()
@@ -244,11 +251,11 @@ class WeatherStation(object):
 
                 logging.info('%.02f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f', outside_temperature, outside_humidity, sealevel_pressure, dew_point, wind_speed, wind_gust, wind_direction, rain_last_60, self._rain_today)
 
-                # try:
-                #     #if crc_check:
-                #         #self.sendWeatherUndergroundData(wind_speed, wind_gust, outside_temperature, outside_humidity, wind_direction, rain_last_60, sealevel_pressure, dew_point, self._rain_today)
-                # except Exception as e:
-                #     logging.error(e.message)
+                try:
+                    if crc_check:
+                        self.sendWeatherUndergroundData(wind_speed, wind_gust, outside_temperature, outside_humidity, wind_direction, rain_last_60, sealevel_pressure, dew_point, self._rain_today)
+                except Exception as e:
+                    logging.error(e.message)
 
 
 
@@ -258,7 +265,7 @@ class WeatherStation(object):
                 #print readings
                 if crc_check:
                     self.send_to_influxdb(readings)
-                    # if counter >= 12:
+                    # if counter >= :
                         # with open('weather.log', 'a') as logfile:
                         #     logfile.write(json.dumps(readings) + '\n')
                         # self._streamer.log_object(readings, key_prefix="some_dict")
