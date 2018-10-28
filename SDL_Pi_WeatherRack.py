@@ -13,6 +13,7 @@
 #
 
 # imports
+import logging
 
 try:
 	# Check for user imports
@@ -173,18 +174,22 @@ class SDL_Pi_WeatherRack:
 	_ads1015 = 0
 
 	def __init__(self, pinAnem, pinRain, intAnem, intRain, ADMode ):
-
-
 		GPIO.setup(pinAnem, GPIO.IN)
 		GPIO.setup(pinRain, GPIO.IN)
 
 		# when a falling edge is detected on port pinAnem, regardless of whatever
 		# else is happening in the program, the function callback will be run
-
 		#GPIO.add_event_detect(pinAnem, GPIO.RISING, callback=self.serviceInterruptAnem)
-                #GPIO.add_event_detect(pinRain, GPIO.RISING, callback=self.serviceInterruptRain)
-		GPIO.add_event_detect(pinAnem, GPIO.RISING, callback=self.serviceInterruptAnem, bouncetime=40 )
-                GPIO.add_event_detect(pinRain, GPIO.RISING, callback=self.serviceInterruptRain, bouncetime=40  )
+		#GPIO.add_event_detect(pinRain, GPIO.RISING, callback=self.serviceInterruptRain)
+		try:
+			GPIO.add_event_detect(pinAnem, GPIO.RISING, callback=self.serviceInterruptAnem, bouncetime=40)
+		except RuntimeError:
+			logging.error("Unable to add event handler for wind speed")
+
+		try:
+			GPIO.add_event_detect(pinRain, GPIO.RISING, callback=self.serviceInterruptRain, bouncetime=40)
+		except RuntimeError:
+			logging.error("Unable to add event handler for rain collection")
 
 		ADS1015 = 0x00  # 12-bit ADC
 		ADS1115 = 0x01  # 16-bit ADC
